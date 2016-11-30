@@ -1,0 +1,68 @@
+Hello goserv
+ちょっと触ってみた
+19:00 2 Jun 2016
+Tags: golang, go, goserv
+
+mizkei
+
+
+
+* goserv
+
+A lightweight toolkit for web applications in Go
+
+* Feature
+
+- Fast & Lightweight
+- Flexible Routing
+- net/http Compatibility
+- Centralized Error Handling
+
+* Routing
+
+各メソッドに渡せる
+.code sample/main.go /server\.Get\(\"\/\", func/,/\}\)/
+
+メソッドチェーンを書ける
+.code sample/main.go /server\.Route\(\"\/articles\"\)\.Get/,/\)/
+
+* Routing
+
+サブルーティングとかも書ける
+.code sample/main.go /api := /,/適用/
+
+/api/*のパスは下記のように記述する
+.code sample/main.go /api\.Get\("\/bookmark"/,/"POST bookmark"\)\)/
+
+パラメータ取得もよくある形で
+.code sample/main.go /api\.Get\("\/bookmark\//,/{/
+validationはParamで指定
+.code sample/main.go /api\.Param\("article_id"/,/{/
+
+* Context
+
+http.Requestに詰め込んでいく
+.code sample/main.go /func authHandler/,/^}/
+Getはinterface{}で取り出すのでキャスト
+.code sample/main.go /user := /,/\)$/
+
+パラメータもContextにはいっている
+.code sample/main.go /id := /,/\)$/
+
+* Error Hadling
+
+ErrorもContextにつめる。その後の処理はスキップされる
+.code sample/main.go /if id == /,/}/
+
+ErrorHandlerを定義するとContextにErrorが入っている時に処理される
+.code sample/main.go /server\.ErrorHandler = /,/}/
+
+* JSON
+
+JSONも簡単に返せる
+.code sample/main.go /api\.Get\("\/article"/,/}\)/
+
+* Summary
+
+薄くnet/httpを拡張する形で書ける
+ミドルウェアも簡単に組み込める

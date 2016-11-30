@@ -1,0 +1,157 @@
+Go 1.8
+Go 1.8の世界を覗いてみよう
+18:30 15 Nov 2016
+Tags: go, golang, 1.8
+
+mizkei
+
+
+
+* Go 1.8
+
+- HTTP server graceful shutdown
+- HTTP/2 server push
+- database/sql additional features
+- package plugin
+- new slice sorting
+
+* HTTP server graceful shutdown
+
+* これまで
+
+シグナルをすべてハンドリングして、
+接続をnet.Connのステータスを管理しなければならなかった
+(gracefulを提供するパッケージの中で頑張ってくれていた)
+
+  // シグナル受け取って
+  signals := make(chan os.Signal, 10)
+  signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+  ...
+  // http.Server.ConnStateを入れ替えてhttp.ConnStateでコネクションの状態を管理
+  func (s *server) NewConnState(c net.Conn, cs http.ConnState) {
+    switch cs {
+    case http.StateNew:
+      // ゴニョゴニョ
+    }
+  }
+
+* これから
+
+context.Contextを渡して、
+http.ServerのShutdownを待ってあげれば良い
+
+.code sample/graceful_shutdown.go /	ctx/,/	srv./
+
+とっても簡単
+
+* HTTP/2 server push
+
+こういうhtmlがあると
+
+.code sample/server_push.go /		w.Header/,/w.Write/
+
+htmlを返した後に/static/gopher.pngにまたリクエストが来る
+
+そこでserverから予めpushしてあげる
+http.ResponsWriterがhttp.Puhserを実装していないと駄目
+
+.code sample/server_push.go /		if p, ok/,/}/
+
+* database/sql additional features
+
+database/sqlが受け口を作るという話なので、
+各ドライバの対応による
+
+* most methods have a context variant
+
+多くのメソッドでcontext.Contextを受け取ることができるようになる
+ExecContextやQueryContextなど
+
+  // context.WithTimeoutで作ったctx渡せるとか便利
+  db.ExecContext(ctx, query)
+
+* transaction isolation levels
+
+トランザクション分離レベルをcontext.Contextで指定することができる
+
+database/sqlパッケージで指定を行う
+IsolationContext(context.Context, level IsolationContext) context.Context
+
+* named parameters
+
+名前付きパラメータを指定できるようになる
+ 
+  db.Exec(query, sql.Param(":id", 10), sql.Param("@keyword", "hey"))
+
+* multiple result set
+
+こんなクエリを実行すると両方共取得することができる
+
+  q := `select * from users;
+        select * from items`
+  rows, err := db.Query(q)
+
+ResultSetを取得していく
+
+  // まず一つ目の結果を取得
+  for rows.Next() {
+    // Scanしていく
+    rows.Scan()
+  }
+
+  // 次の結果へ
+  rows.NextResultSet()
+
+  // 次の結果取得
+  for rows.Next() {
+    // 次の結果のscanへ
+    rows.Scan()
+  }
+
+* hit db directly with Ping
+
+今まではsql.DBのPingメソッドを叩いていたため、Open後にしか利用できなかった
+database/sql/driverにPingerインターフェースが追加される
+
+* column type information
+
+sql.Rows.ColumnTypes() ([]*ColumnType, error) でカラムの型を取得できる
+
+* dynamic plugins
+
+こんな関数のあるgoファイルを-buildmode=sharedでbuildする
+
+  func Hexify(in string) string {
+    return hex.EncodeToString([]byte(in))
+  }
+
+plugin.Openでbuildしたshared libraryを読み込んで実行できる
+
+  import "plugin"
+
+  func main() {
+    p, _ := plugin.Open("hexify.so")
+    f := p.Lookup("Hexify")
+    fmt.Println(f.(func(string) string)("gopher"))
+  }
+
+* new slice sorting
+
+sortしたいと思ったら、sort.Interfaceを実装しなければいけなかった
+
+  type Interface interface {
+    Len() int
+    Less(i, j int) bool
+    Swap(i, j int)
+  }
+
+これからはもっと簡単に
+
+  type Item struct {
+    Name string
+    Price int
+  }
+  list := []Item{}
+  sort.Slice(list, func(i, j int) bool {
+    return list[i].Price >= list[j].Price
+  })

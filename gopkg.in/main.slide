@@ -1,0 +1,57 @@
+gopkg.in
+gopkg.inを使ったバージョン管理
+18:30 29 Nov 2016
+Tags: go, golang
+
+mizkei
+
+
+
+* gopkg.in
+
+goのバージョン管理は色々ある
+goのパッケージバージョン管理のためのURLを提供する
+importの書き方で表現するため外部ツールなどは不要
+
+* Example
+
+https://github.com/go-yaml/yaml
+go-yaml/yamlパッケージでは
+
+  go get gopkg.in/yaml.v2
+
+とすることで v2 のブランチがimportできるようになる
+
+* Usage
+
+importのパスとして指定するパターンは2つ
+
+  gopkg.in/test.v2
+  gopkg.in/user/test.v2
+
+それぞれ下記の用に解釈される
+
+  github.com/go-test/test
+  github.com/user/test
+
+ブランチ名 or タグ名は v2 or v2.N or v2.N.M
+
+* 試す
+
+github.com/mizkei/version-sample にv1、v2、及びv2.3.4のブランチを用意する
+
+.code sample/main.go /import/,/}/
+.code sample/v1/v1.go /import/,/\)/
+.code sample/v2/v2.go /import/,/\)/
+
+* 実行結果
+
+  > go run main.go
+  v1
+  v2.3.4
+
+* Zero version
+
+v0は安定とは言えないバージョンのために利用される
+
+ほとんど利用されることはないがパッケージメンテナが利用を推奨した場合のみ利用する
