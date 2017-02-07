@@ -1,0 +1,237 @@
+go dep
+go depでバージョン管理をしよう
+18:30 8 Feb 2017
+Tags: go, golang
+
+mizkei
+
+
+
+
+
+* go dep
+
+公式が提供しているGoでのバージョン管理ツール
+Dep is a prototype dependency management tool.
+
+.link https://github.com/golang/dep golang dep
+
+* Usage
+
+  > dep init
+lock.jsonとmanifest.jsonが生成される
+
+  > dep status
+  PROJECT                           CONSTRAINT     VERSION        REVISION  LATEST   PKGS USED
+  github.com/BurntSushi/toml        branch master  branch master  9906417   9906417  1  
+  github.com/golang/protobuf        *              branch master  8ee7999   8ee7999  1  
+  github.com/google/go-github       branch master  branch master  4fc61dd   0e7db46  1  
+  github.com/google/go-querystring  *              branch master  53e6ce1   53e6ce1  1  
+  golang.org/x/net                  *              branch master  f249948   007e530  1  
+  golang.org/x/oauth2               branch master  branch master  314dd2c   314dd2c  1  
+  google.golang.org/appengine       *              v1.0.0         150dc57   v1.0.0   1  
+各パッケージのステータスが出力される
+
+* Usage
+
+  > dep ensure
+vendor以下にlockしたバージョンでパッケージが入る
+
+  > dep remove -force golang.org/x/oauth2
+manifest.jsonから削除される(importしていると削除できないのでforceオプションをつけている)
+dep statusの出力もCONSTRAINTが*になる
+
+* Caution
+
+_Dep_ _is_ _NOT_ _an_ _official_ _tool._ _It_ _is_ _not_ _(yet)_ _blessed_ _by_ _the_ _Go_ _team._
+
+.link https://github.com/golang/dep#dep-is-not-an-official-tool-it-is-not-yet-blessed-by-the-go-team readme
+
+* 中身
+
+使い方はinit / status / ensure / removeしかないため、解説するものでもなかった
+
+中身をチラ見してきたので、ちょっとだけ動作をみてみる
+
+* cmd/main.go
+
+  type command interface {
+    Name() string           // "foobar"
+    Args() string           // "<baz> [quux...]"
+    ShortHelp() string      // "Foo the first bar"
+    LongHelp() string       // "Foo the first bar meeting the following conditions..."
+    Register(*flag.FlagSet) // command-specific flags
+    Hidden() bool           // indicates whether the command should be hidden from help output
+    Run(*dep.Ctx, []string) error
+  }
+
+上記のinterfaceを満たすコマンドは5個(ただし、hashiinはhidden)
+
+  commands := []command{
+    &initCommand{},
+    &statusCommand{},
+    &ensureCommand{},
+    &removeCommand{},
+    &hashinCommand{},
+  }
+
+* cmd/main.go
+
+  > dep hash-inputs
+  -CONSTRAINTS-
+  github.com/BurntSushi/toml
+  b-master
+  github.com/google/go-github
+  b-master
+  golang.org/x/oauth2
+  b-master
+  -IMPORTS/REQS-
+  github.com/BurntSushi/toml
+  github.com/google/go-github/github
+  golang.org/x/oauth2
+  -IGNORES-
+  -OVERRIDES-
+  -ANALYZER-
+  dep
+  0.0.1
+
+hash-inputsを実行するとこんなのが出力される
+
+* cmd/main.go
+
+cli作成のパッケージは使っておらず、引数をparseしてサブコマンドの解釈をしている
+
+  func parseArgs(args []string) (cmdName string, printCmdUsage bool, exit bool)
+
+それぞれのサブコマンドでflagは再設定する
+
+  fs := flag.NewFlagSet(cmdName, flag.ExitOnError)
+  fs.BoolVar(verbose, "v", false, "enable verbose logging")
+
+  cmd.Register(fs)
+
+コマンド実行では独自contextを渡している
+
+  // github.com/golang/dep.Ctx
+  // type Ctx struct {
+  //   GOPATH string // Go path
+  // }
+  if err := cmd.Run(ctx, fs.Args()); err != nil {
+    ...
+  }
+
+* cmd/init.go
+
+指定可能なflagはない
+
+.link https://github.com/sdboyer/gps sdboyer/gps
+gps(go package solver)でimportしているパッケージの取得
+
+initで生成されるlock.jsonとmanifest.jsonはgpsの提供しているmanifestとlockを利用している
+gpsがrevisionやtagsによるセマンティックバージョンの解釈までしてくれる
+
+もしGOPATH以下に存在していないパッケージに依存していた場合はそれも解決してくれる
+
+* cmd/ensure.go
+
+flagは下記
+- examples:  実行例
+- update:    更新
+- n:         dryrun(まだ使えない)
+- overrides: 指定したパッケージのversion上書き
+
+	// If -update was passed, we want the solver to allow all versions to change
+
+updateではgpsで依存解決をする際にすべて変更するオプションをonにして更新する
+
+  // deduceConstraint tries to puzzle out what kind of version is given in a string -
+  // semver, a revision, or as a fallback, a plain tag
+  func deduceConstraint(s string) gps.Constraint
+
+overridesの場合は、うまくバージョン指定を解釈してくれる
+
+* cmd/remove.go
+
+flagは下記
+- n:           dryrun(まだ使えない)
+- unused:      importされていないパッケージへの依存削除
+- force:       importされているパッケージであっても依存を削除
+- keep-source: 依存パッケージの(多分vendor以下の)ソースコードは削除しない(まだ使えない)
+
+今のところ使っていないパッケージや指定されたパッケージをlockやmanifestから削除しているだけでコードはそんなに難しいことをしているわけではない
+
+* cmd/status.go
+
+flagは下記
+- detailed: 詳細表示(まだ使えない)
+- json:     jsonフォーマットでの出力(まだ使えない)
+- f:        text/templateフォーマット指定での出力(まだ使えない)
+- dot:      GraphVizによる出力(まだ使えない)
+- old:      更新のあるパッケージのみ表示(まだ使えない)
+- missing:  依存に記述されていないパッケージの出力(まだ使えない)
+- unused:   使われていないパッケージの出力(まだ使えない)
+- modified: 依存が修正されたパッケージの出力(まだ使えない)
+
+つまり、オプションは全て使えない
+
+detailedだけ `not implemented` とでるがその他のオプションを指定しても何も動作に変化はない
+
+* context.go
+
+NewContextではGOPATH内にプロジェクトが存在しているかを確認(存在しないとエラー)
+
+context.Contextを実装しているわけではなく、プロジェクトルートなどの情報を持つ存在
+
+* lock.go
+
+lock.jsonを読み込む
+
+branchやsemantic versioningの解釈などもしている
+
+* manifest.go
+
+manifest.jsonの処理担当
+
+依存パッケージを取得するメソッドなどがある
+
+* analyzer.go
+
+sdboyer/gps.ProjectAnalyzerのインターフェースを満たす構造体が定義されている
+
+* project.go
+
+sdboyer/gps.SolveParametersを作ってくれるメソッドがある
+
+  // MakeParams is a simple helper to create a gps.SolveParameters without setting
+  // any nils incorrectly.
+  func (p *Project) MakeParams() gps.SolveParameters
+
+* fs.go
+
+IsDir、CopyDir、およびCopyFileなどのメソッドが揃っている
+
+* txn_writer.go
+
+ファイル(lock, manifest, vendor)に対する各種操作を安全におこなう
+
+  // SafeWriter transactionalizes writes of manifest, lock, and vendor dir, both
+  // individually and in any combination, into a pseudo-atomic action with
+  // transactional rollback.
+
+manifestやlockなどが更新成功した後にvendorが失敗するなどした時は`goto fail`して各ファイルをrestoreする
+
+  fail:
+    // If we failed at any point, move all the things back into place, then bail.
+    for _, pair := range restore {
+      // Nothing we can do on err here, as we're already in recovery mode.
+      renameWithFallback(pair.from, pair.to)
+    }
+    return failerr
+
+* Summary
+
+sdboyer/gps便利そう
+
+Goはやはり読みやすい
+
+TODOも多いが、追加予定のサブコマンドのオプションなど見ると期待が高まる
